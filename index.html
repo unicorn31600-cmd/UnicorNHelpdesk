@@ -1229,6 +1229,28 @@ document.getElementById('ticketModal').addEventListener('click',function(e){if(e
  
 // init emailjs if config exists
 if(emailConfig.pubkey){try{emailjs.init(emailConfig.pubkey);}catch(e){}}
+
+// ══ EXPOSE FUNCTIONS TO GLOBAL SCOPE (required for type="module") ══
+window.selectRole = selectRole;
+window.goBackToRoleSelect = goBackToRoleSelect;
+window.doLogin = doLogin;
+window.doLogout = doLogout;
+window.staffTab = staffTab;
+window.submitStaffTicket = submitStaffTicket;
+window.adminView = adminView;
+window.adminFilterStatus = adminFilterStatus;
+window.openTicketModal = openTicketModal;
+window.closeTicketModal = closeTicketModal;
+window.saveTicket = saveTicket;
+window.addNote = addNote;
+window.printTicket = printTicket;
+window.exportCSV = exportCSV;
+window.addUser = addUser;
+window.deleteUser = deleteUser;
+window.changePassword = changePassword;
+window.saveEmailConfig = saveEmailConfig;
+window.sendTestEmail = sendTestEmail;
+
 </script>
 </body>
 </html>
