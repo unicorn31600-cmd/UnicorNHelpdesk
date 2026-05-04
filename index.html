@@ -820,9 +820,8 @@ async function submitStaffTicket(){
     submittedBy:currentUser.username,
     ts:Date.now()
   };
-  // Save to Firestore
+  // Save to Firestore (onSnapshot will update the list automatically)
   await saveTicketToFirestore(ticket);
-  tickets.unshift(ticket); // optimistic local update
 
   // Send email notification
   await sendTicketEmail(ticket);
