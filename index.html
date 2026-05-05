@@ -1233,12 +1233,22 @@ function renderUsersTable(){
 async function addUser(){
   const name=document.getElementById('nu-name').value.trim();
   const username=document.getElementById('nu-user').value.trim().toLowerCase();
-  const password=document.getElementById('nu-pass').value;
+  const password=document.getElementById('nu-pass').value.trim();
   const role=document.getElementById('nu-role').value;
   const dept=document.getElementById('nu-dept').value;
   const msg=document.getElementById('userAddMsg');
-  if(!name||!username||!password){
-    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please fill in name, username and password.';
+
+  // Validate all fields
+  if(!name){
+    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please enter a full name.';
+    setTimeout(()=>msg.style.display='none',3000);return;
+  }
+  if(!username){
+    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please enter a username.';
+    setTimeout(()=>msg.style.display='none',3000);return;
+  }
+  if(!password || password.length < 6){
+    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Password must be at least 6 characters.';
     setTimeout(()=>msg.style.display='none',3000);return;
   }
   const users=getUsers();
@@ -1246,24 +1256,22 @@ async function addUser(){
     msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Username already exists.';
     setTimeout(()=>msg.style.display='none',3000);return;
   }
-  showLoadingOverlay('Creating user…');
+
+  msg.style.display='inline';msg.style.color='#a0b8e0';msg.textContent='Creating user…';
   try {
-    // Create Firebase Auth account
     const email = username + '@vuselela.helpdesk';
     await createUserWithEmailAndPassword(auth, email, password);
-    // Save profile to Firestore (don't store plain password)
     const newUser = {username, name, role, dept:dept||'—', email};
     await saveUserToFirestore(newUser);
     ['nu-name','nu-user','nu-pass'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('nu-dept').value='';
-    hideLoadingOverlay();
-    msg.style.display='inline';msg.style.color='#4ade80';msg.textContent='✓ User added!';
+    msg.style.display='inline';msg.style.color='#4ade80';msg.textContent='✓ User added successfully!';
     setTimeout(()=>msg.style.display='none',3000);
     renderUsersTable();
   } catch(e){
-    hideLoadingOverlay();
     msg.style.display='inline';msg.style.color='#ef4444';
-    if(e.code==='auth/email-already-in-use') msg.textContent='⚠ Username already exists in Auth.';
+    if(e.code==='auth/email-already-in-use') msg.textContent='⚠ Username already exists.';
+    else if(e.code==='auth/weak-password') msg.textContent='⚠ Password must be at least 6 characters.';
     else msg.textContent='⚠ Error: ' + e.message;
     setTimeout(()=>msg.style.display='none',5000);
   }
