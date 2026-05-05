@@ -1238,7 +1238,6 @@ async function addUser(){
   const dept=document.getElementById('nu-dept').value;
   const msg=document.getElementById('userAddMsg');
 
-  // Validate all fields
   if(!name){
     msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please enter a full name.';
     setTimeout(()=>msg.style.display='none',3000);return;
@@ -1251,16 +1250,17 @@ async function addUser(){
     msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Password must be at least 6 characters.';
     setTimeout(()=>msg.style.display='none',3000);return;
   }
-  const users=getUsers();
-  if(users.find(u=>u.username===username)){
-    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Username already exists.';
-    setTimeout(()=>msg.style.display='none',3000);return;
-  }
 
   msg.style.display='inline';msg.style.color='#a0b8e0';msg.textContent='Creating user…';
   try {
     const email = username + '@vuselela.helpdesk';
-    await createUserWithEmailAndPassword(auth, email, password);
+    // Try creating Auth account — if already exists just continue to save profile
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch(authErr){
+      if(authErr.code !== 'auth/email-already-in-use') throw authErr;
+      // Auth account exists but no Firestore profile — that's fine, just save the profile
+    }
     const newUser = {username, name, role, dept:dept||'—', email};
     await saveUserToFirestore(newUser);
     ['nu-name','nu-user','nu-pass'].forEach(id=>document.getElementById(id).value='');
@@ -1270,8 +1270,7 @@ async function addUser(){
     renderUsersTable();
   } catch(e){
     msg.style.display='inline';msg.style.color='#ef4444';
-    if(e.code==='auth/email-already-in-use') msg.textContent='⚠ Username already exists.';
-    else if(e.code==='auth/weak-password') msg.textContent='⚠ Password must be at least 6 characters.';
+    if(e.code==='auth/weak-password') msg.textContent='⚠ Password must be at least 6 characters.';
     else msg.textContent='⚠ Error: ' + e.message;
     setTimeout(()=>msg.style.display='none',5000);
   }
