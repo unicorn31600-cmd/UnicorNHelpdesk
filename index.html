@@ -675,7 +675,7 @@ async function saveUserToFirestore(user){
     await setDoc(doc(db,'users',user.username), safeUser);
     // Re-sign in as admin if we were signed in (adding a new user signs us out)
     await loadUsers();
-  } catch(e){ console.error('Save user error:',e); alert('Error creating user: ' + e.message); }
+  } catch(e){ console.error('Save user error:',e); throw e; }
 }
 
 async function deleteUserFromFirestore(username){
@@ -1277,7 +1277,7 @@ async function addUser(){
 }
 
 async function deleteUser(username){
-  if(username===currentUser.username){alert('You cannot remove your own account.');return;}
+  if(username===currentUser.username){const m=document.getElementById('userAddMsg');m.style.display='inline';m.style.color='#ef4444';m.textContent='⚠ You cannot remove your own account.';setTimeout(()=>m.style.display='none',3000);return;}
   const users=getUsers();
   const u=users.find(x=>x.username===username);
   if(!u)return;
@@ -1291,7 +1291,7 @@ async function changePassword(username){
   const idx=users.findIndex(x=>x.username===username);
   if(idx===-1)return;
   const newPw=document.getElementById(`upw-${username}`).value;
-  if(!newPw){alert('Please enter a new password.');return;}
+  if(!newPw){const el=document.getElementById(`pwmsg-${username}`);el.style.display='inline';el.style.color='#ef4444';el.textContent='⚠ Enter a password';setTimeout(()=>el.style.display='none',3000);return;}
   const msg=document.getElementById(`pwmsg-${username}`);
   try {
     // If changing own password, update Firebase Auth directly
