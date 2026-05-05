@@ -346,6 +346,7 @@ table.admin-table{width:100%;border-collapse:collapse;}
     <div class="staff-tabs">
       <button class="staff-tab active" onclick="staffTab('new',this)">＋ Log New Ticket</button>
       <button class="staff-tab" onclick="staffTab('mine',this)">📋 My Tickets</button>
+      <button class="staff-tab" onclick="staffTab('msg',this)">💬 Messages <span id="staffUnreadBadge" style="display:none;background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;margin-left:4px;vertical-align:middle;">0</span></button>
     </div>
     <!-- NEW TICKET -->
     <div id="staffNewPanel">
@@ -391,6 +392,23 @@ table.admin-table{width:100%;border-collapse:collapse;}
     <div id="staffMinePanel" style="display:none">
       <div class="my-tickets-list" id="myTicketsList"></div>
     </div>
+    <!-- MESSAGES -->
+    <div id="staffMsgPanel" style="display:none;">
+      <div style="display:flex;gap:12px;height:520px;">
+        <div style="width:200px;background:rgba(255,255,255,0.72);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.5);overflow-y:auto;flex-shrink:0;">
+          <div style="padding:12px 14px;font-family:Outfit,sans-serif;font-size:13px;font-weight:800;color:#1a2240;border-bottom:1px solid rgba(0,0,0,0.08);">IT Support Chat</div>
+          <div id="staffConvList" style="padding:8px;"></div>
+        </div>
+        <div style="flex:1;background:rgba(255,255,255,0.72);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.5);display:flex;flex-direction:column;">
+          <div id="staffChatHeader" style="padding:14px 18px;border-bottom:1px solid rgba(0,0,0,0.08);font-family:Outfit,sans-serif;font-weight:700;color:#1a2240;font-size:14px;">Select a conversation</div>
+          <div id="staffChatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
+          <div id="staffChatInputArea" style="padding:12px;border-top:1px solid rgba(0,0,0,0.08);display:none;gap:8px;align-items:center;display:none;">
+            <input id="staffMsgInput" class="form-input" placeholder="Type a message…" style="flex:1;margin:0;padding:9px 12px;" onkeydown="if(event.key==='Enter')sendStaffMessage()">
+            <button onclick="sendStaffMessage()" style="padding:9px 16px;background:#1a3a6b;border:none;border-radius:8px;color:#fff;font-family:Outfit,sans-serif;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#1a3a6b'">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
  
@@ -406,6 +424,7 @@ table.admin-table{width:100%;border-collapse:collapse;}
       <div class="admin-nav-section">Dashboard</div>
       <button class="admin-nav-item" onclick="adminView('workload',this)"><span>📊</span> Workload</button>
       <div class="admin-nav-section">Tools</div>
+      <button class="admin-nav-item" onclick="adminView('messages',this)"><span>💬</span> Messages <span class="admin-nav-badge" id="adminUnreadBadge" style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 7px;font-size:10px;display:none;margin-left:auto;">0</span></button>
       <button class="admin-nav-item" onclick="adminView('users',this)"><span>👥</span> Manage Users <span class="admin-nav-badge green" id="badgeUsers">0</span></button>
       <button class="admin-nav-item" onclick="adminView('settings',this)"><span>⚙️</span> Email Setup</button>
     </div>
@@ -446,6 +465,31 @@ table.admin-table{width:100%;border-collapse:collapse;}
       <div class="admin-topbar"><div class="admin-topbar-title">Team Workload</div></div>
       <div class="wl-grid" id="wlGrid"></div>
       <div style="margin-top:14px;"><div class="wl-card"><div class="wl-card-title">Kanban Overview</div><div class="kanban-grid" id="adminKanban"></div></div></div>
+    </div>
+    <!-- MESSAGES VIEW -->
+    <div id="adminMessagesView" style="display:none;flex:1;overflow:hidden;">
+      <div style="display:flex;height:100%;">
+        <!-- Conversations list -->
+        <div style="width:260px;background:#0f1a35;border-right:1px solid #1e3060;display:flex;flex-direction:column;flex-shrink:0;">
+          <div style="padding:18px 20px;border-bottom:1px solid #1e3060;">
+            <div style="font-family:Outfit,sans-serif;font-size:15px;font-weight:800;color:#d0e0f0;margin-bottom:12px;">💬 Messages</div>
+            <div style="display:flex;gap:6px;">
+              <button id="msgTabDM" onclick="switchMsgTab('dm')" style="flex:1;padding:6px;border-radius:7px;border:none;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:#1a3a6b;color:#fff;">Direct</button>
+              <button id="msgTabTeam" onclick="switchMsgTab('team')" style="flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;">Team Chat</button>
+            </div>
+          </div>
+          <div id="adminConvList" style="flex:1;overflow-y:auto;padding:8px;"></div>
+        </div>
+        <!-- Chat window -->
+        <div style="flex:1;display:flex;flex-direction:column;background:#0d1830;">
+          <div id="adminChatHeader" style="padding:16px 20px;border-bottom:1px solid #1e3060;font-family:Outfit,sans-serif;font-weight:700;color:#d0e0f0;font-size:15px;">Select a conversation</div>
+          <div id="adminChatMessages" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px;"></div>
+          <div id="adminChatInput" style="padding:14px 20px;border-top:1px solid #1e3060;display:none;gap:10px;align-items:center;">
+            <input id="adminMsgInput" placeholder="Type a message…" style="flex:1;padding:10px 14px;background:#162240;border:1px solid #1e3060;border-radius:8px;color:#d0e0f0;font-family:Lato,sans-serif;font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')sendAdminMessage()">
+            <button onclick="sendAdminMessage()" style="padding:10px 20px;background:#1a3a6b;border:none;border-radius:8px;color:#fff;font-family:Outfit,sans-serif;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#1a3a6b'">Send</button>
+          </div>
+        </div>
+      </div>
     </div>
     <!-- USERS VIEW -->
     <div id="adminUsersView" style="display:none;flex:1;overflow-y:auto;padding:24px;">
@@ -573,7 +617,7 @@ table.admin-table{width:100%;border-collapse:collapse;}
 <script type="module">
 // ══ FIREBASE SETUP ══
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, doc, getDocs, deleteDoc, onSnapshot, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDocs, addDoc, deleteDoc, onSnapshot, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdfqVUKlpcgEbPG1ox8nUG118avwEx_Uo",
@@ -642,9 +686,32 @@ async function loadUsers(){
     const snap = await getDocs(collection(db,'users'));
     _usersCache = snap.docs.map(d => d.data());
     if(_usersCache.length === 0){
+      // No users at all — create fresh admin
       const admin = {username:'admin', password:'admin123', name:'IT Admin', role:'it', dept:'IT Department'};
       await setDoc(doc(db,'users','admin'), admin);
       _usersCache = [admin];
+    } else {
+      // Make sure admin always has a password field (fix for old Auth-based accounts)
+      const adminDoc = _usersCache.find(u=>u.username==='admin');
+      if(!adminDoc){
+        const admin = {username:'admin', password:'admin123', name:'IT Admin', role:'it', dept:'IT Department'};
+        await setDoc(doc(db,'users','admin'), admin);
+        _usersCache.push(admin);
+      } else if(!adminDoc.password){
+        const fixed = {...adminDoc, password:'admin123'};
+        await setDoc(doc(db,'users','admin'), fixed);
+        _usersCache = _usersCache.map(u=>u.username==='admin'?fixed:u);
+      }
+      // Fix any other users missing password field
+      for(const u of _usersCache){
+        if(!u.password){
+          const fixed = {...u, password:'pass1234'};
+          await setDoc(doc(db,'users',u.username), fixed);
+        }
+      }
+      // Reload after fixes
+      const snap2 = await getDocs(collection(db,'users'));
+      _usersCache = snap2.docs.map(d => d.data());
     }
   } catch(e){ console.error('Load users error:',e); }
 }
@@ -774,6 +841,7 @@ function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classL
 function showStaffPortal(){
   showScreen('staffScreen');
   listenTickets();
+  listenConversations();
   const initials=currentUser.name.slice(0,2).toUpperCase();
   document.getElementById('staffAvatarEl').textContent=initials;
   document.getElementById('staffNameEl').textContent=currentUser.name;
@@ -799,7 +867,13 @@ function staffTab(tab,btn){
   btn.classList.add('active');
   document.getElementById('staffNewPanel').style.display=tab==='new'?'':'none';
   document.getElementById('staffMinePanel').style.display=tab==='mine'?'':'none';
+  document.getElementById('staffMsgPanel').style.display=tab==='msg'?'':'none';
   if(tab==='mine') renderMyTickets();
+  if(tab==='msg'){
+    getDocs(collection(db,'conversations')).then(snap=>{
+      renderStaffConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
+    });
+  }
 }
  
 async function submitStaffTicket(){
@@ -911,9 +985,17 @@ function adminView(view,btn){
   const wv=document.getElementById('adminWorkloadView');
   const sv=document.getElementById('adminSettingsView');
   const uv=document.getElementById('adminUsersView');
-  tv.style.display='none';wv.style.display='none';sv.style.display='none';uv.style.display='none';
+  tv.style.display='none';wv.style.display='none';sv.style.display='none';uv.style.display='none';const mv=document.getElementById('adminMessagesView');if(mv)mv.style.display='none';
   if(view==='workload'){wv.style.display='flex';renderWorkload();}
   else if(view==='settings'){sv.style.display='flex';}
+  else if(view==='messages'){
+    document.getElementById('adminMessagesView').style.display='flex';
+    currentMsgTab='dm';
+    getDocs(collection(db,'conversations')).then(snap=>{
+      renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
+    });
+    listenConversations();
+  }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
   else{
     tv.style.display='flex';
@@ -1280,6 +1362,202 @@ document.getElementById('ticketModal').addEventListener('click',function(e){if(e
 // init emailjs if config exists
 if(emailConfig.pubkey){try{emailjs.init(emailConfig.pubkey);}catch(e){}}
 
+
+// ══ MESSAGING ══
+let currentConvId = null;
+let msgListener = null;
+let currentMsgTab = 'dm'; // 'dm' or 'team'
+
+// Get or create a DM conversation ID between two users
+function getDMId(userA, userB){
+  return [userA, userB].sort().join('__');
+}
+
+// Listen to conversations for current user
+function listenConversations(){
+  const q = query(collection(db,'messages'), orderBy('ts','asc'));
+  onSnapshot(collection(db,'conversations'), async (snap) => {
+    const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if(currentUser.role==='it'){
+      renderAdminConvList(convs);
+    } else {
+      renderStaffConvList(convs);
+    }
+  });
+}
+
+function renderStaffConvList(convs){
+  const el = document.getElementById('staffConvList');
+  if(!el) return;
+  // Staff only sees their DM with IT
+  const myConvs = convs.filter(c => c.type==='dm' && c.participants && c.participants.includes(currentUser.username));
+  el.innerHTML = '';
+  // Always show IT Support option
+  const itConvId = getDMId(currentUser.username, 'it_team');
+  const itConv = myConvs.find(c=>c.id===itConvId) || null;
+  const unread = itConv && itConv.lastSender !== currentUser.username && itConv.unreadFor && itConv.unreadFor[currentUser.username];
+  const div = document.createElement('div');
+  div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .15s;background:${currentConvId===itConvId?'rgba(26,58,107,0.15)':'transparent'};`;
+  div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#1a2240;">🔧 IT Support</div><div style="font-size:11px;color:#5a6a8a;margin-top:2px;">${itConv?itConv.lastMsg||'Start chatting…':'Start chatting…'}</div>${unread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;">New</span>':''}`;
+  div.onmouseenter = ()=>{ if(currentConvId!==itConvId) div.style.background='rgba(26,58,107,0.08)'; };
+  div.onmouseleave = ()=>{ if(currentConvId!==itConvId) div.style.background='transparent'; };
+  div.onclick = ()=> openStaffConv(itConvId, 'IT Support');
+  el.appendChild(div);
+}
+
+function renderAdminConvList(convs){
+  const el = document.getElementById('adminConvList');
+  if(!el) return;
+  el.innerHTML = '';
+  if(currentMsgTab === 'team'){
+    // Show team chat
+    const div = document.createElement('div');
+    div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;background:${currentConvId==='team_chat'?'rgba(192,57,43,0.15)':'transparent'};transition:background .15s;`;
+    div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">👥 IT Team Chat</div><div style="font-size:11px;color:#5a7aaa;margin-top:2px;">Internal team discussion</div>`;
+    div.onclick = ()=> openAdminConv('team_chat','IT Team Chat', 'team');
+    el.appendChild(div);
+  } else {
+    // Show DM conversations with staff
+    const dmConvs = convs.filter(c=>c.type==='dm');
+    if(!dmConvs.length){
+      el.innerHTML = '<div style="padding:16px;font-size:12px;color:#4a6a94;text-align:center;">No messages yet.<br>Staff will message you here.</div>';
+      return;
+    }
+    dmConvs.sort((a,b)=>(b.ts||0)-(a.ts||0)).forEach(conv => {
+      const other = conv.participants.find(p=>p!=='it_team');
+      const users = getUsers();
+      const u = users.find(x=>x.username===other);
+      const name = u ? u.name : other;
+      const unread = conv.unreadFor && conv.unreadFor['it_team'];
+      const div = document.createElement('div');
+      div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;background:${currentConvId===conv.id?'rgba(192,57,43,0.15)':'transparent'};transition:background .15s;`;
+      div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">${name}${unread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;margin-left:6px;">New</span>':''}</div><div style="font-size:11px;color:#5a7aaa;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${conv.lastMsg||'…'}</div>`;
+      div.onclick = ()=> openAdminConv(conv.id, name, 'dm');
+      el.appendChild(div);
+    });
+  }
+}
+
+async function openStaffConv(convId, title){
+  currentConvId = convId;
+  document.getElementById('staffChatHeader').textContent = '🔧 ' + title;
+  document.getElementById('staffChatInputArea').style.display = 'flex';
+  document.getElementById('staffMsgInput').focus();
+  // Ensure conversation doc exists
+  await setDoc(doc(db,'conversations',convId), {
+    type:'dm', participants:[currentUser.username,'it_team'],
+    updatedAt: Date.now()
+  }, {merge:true});
+  // Mark as read
+  await setDoc(doc(db,'conversations',convId), {[`unreadFor.${currentUser.username}`]:false}, {merge:true});
+  listenMessages('staffChatMessages', convId, false);
+  // Re-render list
+  const snap = await getDocs(collection(db,'conversations'));
+  renderStaffConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
+}
+
+async function openAdminConv(convId, title, type){
+  currentConvId = convId;
+  document.getElementById('adminChatHeader').textContent = (type==='team'?'👥 ':'💬 ') + title;
+  document.getElementById('adminChatInput').style.display = 'flex';
+  document.getElementById('adminMsgInput').focus();
+  if(type==='team'){
+    await setDoc(doc(db,'conversations',convId), {type:'team', updatedAt:Date.now()}, {merge:true});
+  }
+  // Mark as read for IT
+  await setDoc(doc(db,'conversations',convId), {['unreadFor.it_team']:false}, {merge:true});
+  listenMessages('adminChatMessages', convId, true);
+  const snap = await getDocs(collection(db,'conversations'));
+  renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
+}
+
+function listenMessages(containerId, convId, isDark){
+  if(msgListener) msgListener();
+  const q = query(collection(db,'conversations',convId,'msgs'), orderBy('ts','asc'));
+  msgListener = onSnapshot(q, snap => {
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    el.innerHTML = '';
+    snap.docs.forEach(d => {
+      const msg = d.data();
+      const isMe = msg.sender === currentUser.username;
+      const bubble = document.createElement('div');
+      bubble.style.cssText = `display:flex;flex-direction:column;align-items:${isMe?'flex-end':'flex-start'};gap:3px;`;
+      const name = document.createElement('div');
+      name.style.cssText = `font-size:10px;color:${isDark?'#5a7aaa':'#7a8aaa'};font-family:Outfit,sans-serif;`;
+      name.textContent = isMe ? 'You' : msg.senderName;
+      const text = document.createElement('div');
+      text.style.cssText = `max-width:70%;padding:10px 14px;border-radius:${isMe?'14px 14px 4px 14px':'14px 14px 14px 4px'};font-size:13px;line-height:1.4;word-break:break-word;background:${isMe?(isDark?'#1a3a6b':'#1a3a6b'):(isDark?'#162240':'rgba(0,0,0,0.07)')};color:${isMe?'#fff':(isDark?'#d0e0f0':'#1a2240')};`;
+      text.textContent = msg.text;
+      const time = document.createElement('div');
+      time.style.cssText = `font-size:10px;color:${isDark?'#3a5a94':'#aaa'};`;
+      time.textContent = new Date(msg.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      bubble.appendChild(name);
+      bubble.appendChild(text);
+      bubble.appendChild(time);
+      el.appendChild(bubble);
+    });
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+async function sendStaffMessage(){
+  const input = document.getElementById('staffMsgInput');
+  const text = input.value.trim();
+  if(!text || !currentConvId) return;
+  input.value = '';
+  const msgData = {text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
+  await addDoc(collection(db,'conversations',currentConvId,'msgs'), msgData);
+  await setDoc(doc(db,'conversations',currentConvId), {
+    lastMsg:text, lastSender:currentUser.username, ts:Date.now(),
+    'unreadFor.it_team': true
+  }, {merge:true});
+}
+
+async function sendAdminMessage(){
+  const input = document.getElementById('adminMsgInput');
+  const text = input.value.trim();
+  if(!text || !currentConvId) return;
+  input.value = '';
+  const msgData = {text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
+  await addDoc(collection(db,'conversations',currentConvId,'msgs'), msgData);
+  // If DM, mark unread for the staff user
+  if(currentConvId !== 'team_chat'){
+    const convSnap = await getDocs(collection(db,'conversations'));
+    const conv = convSnap.docs.find(d=>d.id===currentConvId);
+    if(conv){
+      const other = conv.data().participants?.find(p=>p!=='it_team');
+      if(other){
+        await setDoc(doc(db,'conversations',currentConvId), {
+          lastMsg:text, lastSender:currentUser.username, ts:Date.now(),
+          [`unreadFor.${other}`]: true
+        }, {merge:true});
+      }
+    }
+  } else {
+    await setDoc(doc(db,'conversations',currentConvId), {
+      lastMsg:text, lastSender:currentUser.username, ts:Date.now()
+    }, {merge:true});
+  }
+}
+
+function switchMsgTab(tab){
+  currentMsgTab = tab;
+  currentConvId = null;
+  document.getElementById('adminChatHeader').textContent = 'Select a conversation';
+  document.getElementById('adminChatInput').style.display = 'none';
+  document.getElementById('adminChatMessages').innerHTML = '';
+  if(msgListener){ msgListener(); msgListener=null; }
+  document.getElementById('msgTabDM').style.cssText = tab==='dm'?'flex:1;padding:6px;border-radius:7px;border:none;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:#1a3a6b;color:#fff;':'flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;';
+  document.getElementById('msgTabTeam').style.cssText = tab==='team'?'flex:1;padding:6px;border-radius:7px;border:none;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:#1a3a6b;color:#fff;':'flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;';
+  // Re-render conv list
+  getDocs(collection(db,'conversations')).then(snap=>{
+    renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
+  });
+}
+
+// ══ END MESSAGING ══
+
 // ══ EXPOSE FUNCTIONS TO GLOBAL SCOPE (required for type="module") ══
 window.selectRole = selectRole;
 window.goBackToRoleSelect = goBackToRoleSelect;
@@ -1299,6 +1577,9 @@ window.addUser = addUser;
 window.deleteUser = deleteUser;
 window.changePassword = changePassword;
 window.saveEmailConfig = saveEmailConfig;
+window.sendStaffMessage = sendStaffMessage;
+window.sendAdminMessage = sendAdminMessage;
+window.switchMsgTab = switchMsgTab;
 window.sendTestEmail = sendTestEmail;
 
 </script>
