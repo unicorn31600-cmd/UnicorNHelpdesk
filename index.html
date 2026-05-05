@@ -783,6 +783,9 @@ async function doLogin(){
   try {
     const email = u + '@vuselela.helpdesk';
     await signInWithEmailAndPassword(auth, email, p);
+    // Store credentials so we can re-sign in after adding new users
+    sessionStorage.setItem('_cu', u);
+    sessionStorage.setItem('_cp', p);
     // onAuthStateChanged will handle the rest
   } catch(e){
     hideLoadingOverlay();
@@ -797,6 +800,8 @@ async function doLogin(){
  
 async function doLogout(){
   await signOut(auth);
+  sessionStorage.removeItem('_cu');
+  sessionStorage.removeItem('_cp');
   currentUser=null;
   _ticketListenerActive=false;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -1270,7 +1275,16 @@ async function addUser(){
     await setDoc(doc(db,'users',username), {username, name, role, dept, email});
     await loadUsers();
 
-    // Step 3: Clear form
+    // Step 3: Re-sign back in as admin (creating a new user signs out current session)
+    try {
+      const savedUser = sessionStorage.getItem('_cu');
+      const savedPass = sessionStorage.getItem('_cp');
+      if(savedUser && savedPass){
+        await signInWithEmailAndPassword(auth, savedUser+'@vuselela.helpdesk', savedPass);
+      }
+    } catch(e){ console.log('Re-signin error:', e); }
+
+    // Step 4: Clear form
     document.getElementById('nu-name').value='';
     document.getElementById('nu-user').value='';
     document.getElementById('nu-pass').value='';
