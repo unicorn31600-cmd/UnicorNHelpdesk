@@ -574,6 +574,7 @@ table.admin-table{width:100%;border-collapse:collapse;}
 // ══ FIREBASE SETUP ══
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdfqVUKlpcgEbPG1ox8nUG118avwEx_Uo",
@@ -585,6 +586,7 @@ const firebaseConfig = {
 };
 const fireApp = initializeApp(firebaseConfig);
 const db = getFirestore(fireApp);
+const auth = getAuth(fireApp);
 
 // ══ CONFIG ══
 let emailConfig = JSON.parse(localStorage.getItem('vuselela_email_cfg')||'{}');
@@ -643,7 +645,8 @@ async function loadUsers(){
     _usersCache = snap.docs.map(d => d.data());
     // seed admin if no users exist
     if(_usersCache.length === 0){
-      const admin = {username:'admin',password:'admin123',name:'IT Admin',role:'it',dept:'IT Department'};
+      const admin = {username:'admin',name:'IT Admin',role:'it',dept:'IT Department',email:'admin@vuselela.helpdesk'};
+      // Note: password is stored only in Firebase Auth, never in Firestore
       await setDoc(doc(db,'users','admin'), admin);
       _usersCache = [admin];
     }
@@ -659,9 +662,20 @@ async function saveUsers(usersArray){
 
 async function saveUserToFirestore(user){
   try {
-    await setDoc(doc(db,'users',user.username), user);
+    // Create Firebase Auth account using username@vuselela.helpdesk as email
+    const email = user.username + '@vuselela.helpdesk';
+    try {
+      await createUserWithEmailAndPassword(auth, email, user.password);
+    } catch(authErr){
+      // If account already exists (e.g. password change), that's fine
+      if(authErr.code !== 'auth/email-already-in-use') throw authErr;
+    }
+    // Store user profile in Firestore (without password for security)
+    const safeUser = {username:user.username, name:user.name, role:user.role, dept:user.dept, email};
+    await setDoc(doc(db,'users',user.username), safeUser);
+    // Re-sign in as admin if we were signed in (adding a new user signs us out)
     await loadUsers();
-  } catch(e){ console.error('Save user error:',e); }
+  } catch(e){ console.error('Save user error:',e); alert('Error creating user: ' + e.message); }
 }
 
 async function deleteUserFromFirestore(username){
@@ -676,12 +690,48 @@ let currentUser=null,currentRole='staff';
 let currentAdminFilter={view:'all',status:'all',search:''};
 let editingTicketId=null;
 
-// Initialise app — load users from Firestore on page load
-window.addEventListener('DOMContentLoaded', async () => {
+// Initialise app — handle auth state
+window.addEventListener('DOMContentLoaded', () => {
   showLoadingOverlay('Connecting to database…');
-  await loadUsers();
-  hideLoadingOverlay();
+
+  onAuthStateChanged(auth, async (fireUser) => {
+    if(fireUser){
+      // User is signed in — load their profile from Firestore
+      showLoadingOverlay('Loading your account…');
+      await loadUsers();
+      const username = fireUser.email.replace('@vuselela.helpdesk','');
+      const profile = _usersCache.find(u => u.username === username);
+      if(profile){
+        currentUser = {username: profile.username, name: profile.name, role: profile.role, dept: profile.dept||''};
+        hideLoadingOverlay();
+        if(currentUser.role === 'it') showAdminPanel();
+        else showStaffPortal();
+      } else {
+        // Profile not in Firestore — sign out
+        await signOut(auth);
+        hideLoadingOverlay();
+      }
+    } else {
+      // Not signed in — show login
+      hideLoadingOverlay();
+      currentUser = null;
+    }
+  });
+
+  // Seed admin account on first load
+  seedAdminAuth();
 });
+
+async function seedAdminAuth(){
+  // Ensure the admin Firebase Auth account exists
+  try {
+    await createUserWithEmailAndPassword(auth, 'admin@vuselela.helpdesk', 'admin123');
+  } catch(e){
+    // Already exists — that's fine
+  }
+  // Ensure admin Firestore profile exists
+  await loadUsers();
+}
 
 function showLoadingOverlay(msg){
   let ov = document.getElementById('loadingOverlay');
@@ -723,28 +773,35 @@ function goBackToRoleSelect(){
 async function doLogin(){
   const err=document.getElementById('loginErr');
   err.style.display='none';
-  const users=getUsers();
-  if(currentRole==='staff'){
-    const u=document.getElementById('staffUser').value.trim().toLowerCase();
-    const p=document.getElementById('staffPass').value;
-    if(!u||!p){err.textContent='Please enter your username and password.';err.style.display='block';return;}
-    const found=users.find(x=>x.username===u&&x.password===p&&x.role==='staff');
-    if(!found){err.textContent='Incorrect username or password.';err.style.display='block';return;}
-    currentUser={username:found.username,name:found.name,dept:found.dept,role:'staff'};
-    showStaffPortal();
-  } else {
-    const u=document.getElementById('itUser').value.trim().toLowerCase();
-    const p=document.getElementById('itPass').value;
-    if(!u||!p){err.textContent='Please enter your username and password.';err.style.display='block';return;}
-    const found=users.find(x=>x.username===u&&x.password===p&&x.role==='it');
-    if(!found){err.textContent='Incorrect IT credentials.';err.style.display='block';return;}
-    currentUser={username:found.username,name:found.name,role:'it'};
-    showAdminPanel();
+  const u = currentRole==='staff'
+    ? document.getElementById('staffUser').value.trim().toLowerCase()
+    : document.getElementById('itUser').value.trim().toLowerCase();
+  const p = currentRole==='staff'
+    ? document.getElementById('staffPass').value
+    : document.getElementById('itPass').value;
+
+  if(!u||!p){err.textContent='Please enter your username and password.';err.style.display='block';return;}
+
+  showLoadingOverlay('Signing in…');
+  try {
+    const email = u + '@vuselela.helpdesk';
+    await signInWithEmailAndPassword(auth, email, p);
+    // onAuthStateChanged will handle the rest
+  } catch(e){
+    hideLoadingOverlay();
+    if(e.code==='auth/invalid-credential'||e.code==='auth/user-not-found'||e.code==='auth/wrong-password'){
+      err.textContent='Incorrect username or password.';
+    } else {
+      err.textContent='Login failed: ' + e.message;
+    }
+    err.style.display='block';
   }
 }
  
-function doLogout(){
+async function doLogout(){
+  await signOut(auth);
   currentUser=null;
+  _ticketListenerActive=false;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('loginScreen').classList.add('active');
   ['staffUser','staffPass','itUser','itPass'].forEach(id=>document.getElementById(id).value='');
@@ -1189,13 +1246,27 @@ async function addUser(){
     msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Username already exists.';
     setTimeout(()=>msg.style.display='none',3000);return;
   }
-  const newUser = {username,password,name,role,dept:dept||'—'};
-  await saveUserToFirestore(newUser);
-  ['nu-name','nu-user','nu-pass'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('nu-dept').value='';
-  msg.style.display='inline';msg.style.color='#60a0f0';msg.textContent='✓ User added!';
-  setTimeout(()=>msg.style.display='none',3000);
-  renderUsersTable();
+  showLoadingOverlay('Creating user…');
+  try {
+    // Create Firebase Auth account
+    const email = username + '@vuselela.helpdesk';
+    await createUserWithEmailAndPassword(auth, email, password);
+    // Save profile to Firestore (don't store plain password)
+    const newUser = {username, name, role, dept:dept||'—', email};
+    await saveUserToFirestore(newUser);
+    ['nu-name','nu-user','nu-pass'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('nu-dept').value='';
+    hideLoadingOverlay();
+    msg.style.display='inline';msg.style.color='#4ade80';msg.textContent='✓ User added!';
+    setTimeout(()=>msg.style.display='none',3000);
+    renderUsersTable();
+  } catch(e){
+    hideLoadingOverlay();
+    msg.style.display='inline';msg.style.color='#ef4444';
+    if(e.code==='auth/email-already-in-use') msg.textContent='⚠ Username already exists in Auth.';
+    else msg.textContent='⚠ Error: ' + e.message;
+    setTimeout(()=>msg.style.display='none',5000);
+  }
 }
 
 async function deleteUser(username){
@@ -1214,11 +1285,21 @@ async function changePassword(username){
   if(idx===-1)return;
   const newPw=document.getElementById(`upw-${username}`).value;
   if(!newPw){alert('Please enter a new password.');return;}
-  users[idx].password=newPw;
-  await saveUserToFirestore(users[idx]);
   const msg=document.getElementById(`pwmsg-${username}`);
-  msg.style.display='inline';
-  setTimeout(()=>msg.style.display='none',2500);
+  try {
+    // If changing own password, update Firebase Auth directly
+    const fireUser = auth.currentUser;
+    if(fireUser && fireUser.email === username+'@vuselela.helpdesk'){
+      await updatePassword(fireUser, newPw);
+    }
+    // Save profile (no plain password stored)
+    await saveUserToFirestore(users[idx]);
+    msg.style.display='inline';msg.style.color='#4ade80';msg.textContent='✓ Saved';
+    setTimeout(()=>msg.style.display='none',2500);
+  } catch(e){
+    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ '+e.message;
+    setTimeout(()=>msg.style.display='none',4000);
+  }
 }
 
 // update user badge on admin panel load - handled in showAdminPanel directly
