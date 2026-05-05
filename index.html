@@ -661,21 +661,18 @@ async function saveUsers(usersArray){
 }
 
 async function saveUserToFirestore(user){
+  // ONLY saves profile to Firestore — Auth is handled separately in addUser
   try {
-    // Create Firebase Auth account using username@vuselela.helpdesk as email
-    const email = user.username + '@vuselela.helpdesk';
-    try {
-      await createUserWithEmailAndPassword(auth, email, user.password);
-    } catch(authErr){
-      // If account already exists (e.g. password change), that's fine
-      if(authErr.code !== 'auth/email-already-in-use') throw authErr;
-    }
-    // Store user profile in Firestore (without password for security)
-    const safeUser = {username:user.username, name:user.name, role:user.role, dept:user.dept, email};
+    const safeUser = {
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      dept: user.dept||'—',
+      email: user.username + '@vuselela.helpdesk'
+    };
     await setDoc(doc(db,'users',user.username), safeUser);
-    // Re-sign in as admin if we were signed in (adding a new user signs us out)
     await loadUsers();
-  } catch(e){ console.error('Save user error:',e); throw e; }
+  } catch(e){ console.error('Firestore save error:',e); throw e; }
 }
 
 async function deleteUserFromFirestore(username){
@@ -1231,48 +1228,66 @@ function renderUsersTable(){
 }
 
 async function addUser(){
-  const name=document.getElementById('nu-name').value.trim();
-  const username=document.getElementById('nu-user').value.trim().toLowerCase();
-  const password=document.getElementById('nu-pass').value.trim();
-  const role=document.getElementById('nu-role').value;
-  const dept=document.getElementById('nu-dept').value;
-  const msg=document.getElementById('userAddMsg');
+  const msg = document.getElementById('userAddMsg');
 
-  if(!name){
-    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please enter a full name.';
-    setTimeout(()=>msg.style.display='none',3000);return;
+  // Read values
+  const name     = document.getElementById('nu-name').value.trim();
+  const username = document.getElementById('nu-user').value.trim().toLowerCase().replace(/\s+/g,'');
+  const password = document.getElementById('nu-pass').value;
+  const role     = document.getElementById('nu-role').value;
+  const dept     = document.getElementById('nu-dept').value || '—';
+
+  // Validate
+  if(!name || !username || !password){
+    msg.style.cssText='display:inline;color:#ef4444;font-size:13px;';
+    msg.textContent='⚠ Name, username and password are all required.';
+    setTimeout(()=>msg.style.display='none',4000); return;
   }
-  if(!username){
-    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Please enter a username.';
-    setTimeout(()=>msg.style.display='none',3000);return;
-  }
-  if(!password || password.length < 6){
-    msg.style.display='inline';msg.style.color='#ef4444';msg.textContent='⚠ Password must be at least 6 characters.';
-    setTimeout(()=>msg.style.display='none',3000);return;
+  if(password.length < 6){
+    msg.style.cssText='display:inline;color:#ef4444;font-size:13px;';
+    msg.textContent='⚠ Password must be at least 6 characters.';
+    setTimeout(()=>msg.style.display='none',4000); return;
   }
 
-  msg.style.display='inline';msg.style.color='#a0b8e0';msg.textContent='Creating user…';
+  msg.style.cssText='display:inline;color:#a0b8e0;font-size:13px;';
+  msg.textContent='Creating user…';
+
+  const email = username + '@vuselela.helpdesk';
+
   try {
-    const email = username + '@vuselela.helpdesk';
-    // Try creating Auth account — if already exists just continue to save profile
+    // Step 1: Create Firebase Auth account
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch(authErr){
-      if(authErr.code !== 'auth/email-already-in-use') throw authErr;
-      // Auth account exists but no Firestore profile — that's fine, just save the profile
+      if(authErr.code === 'auth/email-already-in-use'){
+        // Auth exists but Firestore profile may be missing — continue
+      } else {
+        throw authErr;
+      }
     }
-    const newUser = {username, name, role, dept:dept||'—', email};
-    await saveUserToFirestore(newUser);
-    ['nu-name','nu-user','nu-pass'].forEach(id=>document.getElementById(id).value='');
+
+    // Step 2: Save profile to Firestore (no password stored)
+    await setDoc(doc(db,'users',username), {username, name, role, dept, email});
+    await loadUsers();
+
+    // Step 3: Clear form
+    document.getElementById('nu-name').value='';
+    document.getElementById('nu-user').value='';
+    document.getElementById('nu-pass').value='';
     document.getElementById('nu-dept').value='';
-    msg.style.display='inline';msg.style.color='#4ade80';msg.textContent='✓ User added successfully!';
+
+    msg.style.cssText='display:inline;color:#4ade80;font-size:13px;';
+    msg.textContent='✓ User added successfully!';
     setTimeout(()=>msg.style.display='none',3000);
     renderUsersTable();
+
   } catch(e){
-    msg.style.display='inline';msg.style.color='#ef4444';
-    if(e.code==='auth/weak-password') msg.textContent='⚠ Password must be at least 6 characters.';
-    else msg.textContent='⚠ Error: ' + e.message;
-    setTimeout(()=>msg.style.display='none',5000);
+    console.error('addUser error:', e.code, e.message);
+    msg.style.cssText='display:inline;color:#ef4444;font-size:13px;';
+    if(e.code==='auth/weak-password')      msg.textContent='⚠ Password too weak — use 6+ characters.';
+    else if(e.code==='auth/invalid-email') msg.textContent='⚠ Invalid username format.';
+    else                                   msg.textContent='⚠ ' + e.message;
+    setTimeout(()=>msg.style.display='none',6000);
   }
 }
 
