@@ -870,9 +870,10 @@ function staffTab(tab,btn){
   document.getElementById('staffMsgPanel').style.display=tab==='msg'?'':'none';
   if(tab==='mine') renderMyTickets();
   if(tab==='msg'){
-    getDocs(collection(db,'conversations')).then(snap=>{
-      renderStaffConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
-    });
+    // Auto-open IT Support conversation immediately
+    const itConvId = getDMId(currentUser.username, 'it_team');
+    openStaffConv(itConvId, 'IT Support');
+    listenConversations();
   }
 }
  
@@ -990,11 +991,10 @@ function adminView(view,btn){
   else if(view==='settings'){sv.style.display='flex';}
   else if(view==='messages'){
     document.getElementById('adminMessagesView').style.display='flex';
-    currentMsgTab='dm';
-    getDocs(collection(db,'conversations')).then(snap=>{
-      renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
-    });
+    currentMsgTab='team';
     listenConversations();
+    // Auto-open team chat
+    setTimeout(()=> openAdminConv('team_chat','IT Team Chat','team'), 300);
   }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
   else{
@@ -1580,6 +1580,8 @@ window.saveEmailConfig = saveEmailConfig;
 window.sendStaffMessage = sendStaffMessage;
 window.sendAdminMessage = sendAdminMessage;
 window.switchMsgTab = switchMsgTab;
+window.openAdminConv = openAdminConv;
+window.openStaffConv = openStaffConv;
 window.sendTestEmail = sendTestEmail;
 
 </script>
