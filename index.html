@@ -394,17 +394,24 @@ table.admin-table{width:100%;border-collapse:collapse;}
     </div>
     <!-- MESSAGES -->
     <div id="staffMsgPanel" style="display:none;">
-      <div style="display:flex;gap:12px;height:520px;">
-        <div style="width:200px;background:rgba(255,255,255,0.72);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.5);overflow-y:auto;flex-shrink:0;">
-          <div style="padding:12px 14px;font-family:Outfit,sans-serif;font-size:13px;font-weight:800;color:#1a2240;border-bottom:1px solid rgba(0,0,0,0.08);">IT Support Chat</div>
-          <div id="staffConvList" style="padding:8px;"></div>
+      <div style="display:flex;gap:12px;height:calc(100vh - 200px);min-height:480px;">
+        <!-- Left: conversation list -->
+        <div style="width:220px;background:rgba(255,255,255,0.82);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.6);display:flex;flex-direction:column;flex-shrink:0;">
+          <div style="padding:14px 16px;font-family:Outfit,sans-serif;font-size:13px;font-weight:800;color:#1a2240;border-bottom:1px solid rgba(0,0,0,0.08);">💬 Conversations</div>
+          <div style="padding:8px;">
+            <button onclick="staffStartNewConv()" style="width:100%;padding:9px;background:#1a3a6b;border:none;border-radius:8px;color:#fff;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#1a3a6b'">+ New Conversation</button>
+          </div>
+          <div id="staffConvList" style="flex:1;overflow-y:auto;padding:0 8px 8px;"></div>
         </div>
-        <div style="flex:1;background:rgba(255,255,255,0.72);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.5);display:flex;flex-direction:column;">
-          <div id="staffChatHeader" style="padding:14px 18px;border-bottom:1px solid rgba(0,0,0,0.08);font-family:Outfit,sans-serif;font-weight:700;color:#1a2240;font-size:14px;">Select a conversation</div>
+        <!-- Right: chat window -->
+        <div style="flex:1;background:rgba(255,255,255,0.82);backdrop-filter:blur(12px);border-radius:14px;border:1px solid rgba(255,255,255,0.6);display:flex;flex-direction:column;">
+          <div id="staffChatHeader" style="padding:14px 18px;border-bottom:1px solid rgba(0,0,0,0.08);font-family:Outfit,sans-serif;font-weight:700;color:#1a2240;font-size:14px;display:flex;align-items:center;gap:10px;">
+            <span id="staffChatHeaderText">Select or start a conversation</span>
+          </div>
           <div id="staffChatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
-          <div id="staffChatInputArea" style="padding:12px;border-top:1px solid rgba(0,0,0,0.08);display:none;gap:8px;align-items:center;display:none;">
+          <div id="staffChatInputArea" style="padding:12px;border-top:1px solid rgba(0,0,0,0.08);gap:8px;align-items:center;display:none;">
             <input id="staffMsgInput" class="form-input" placeholder="Type a message…" style="flex:1;margin:0;padding:9px 12px;" onkeydown="if(event.key==='Enter')sendStaffMessage()">
-            <button onclick="sendStaffMessage()" style="padding:9px 16px;background:#1a3a6b;border:none;border-radius:8px;color:#fff;font-family:Outfit,sans-serif;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#1a3a6b'">Send</button>
+            <button onclick="sendStaffMessage()" style="padding:9px 18px;background:#1a3a6b;border:none;border-radius:8px;color:#fff;font-family:Outfit,sans-serif;font-weight:700;cursor:pointer;flex-shrink:0;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#1a3a6b'">Send ➤</button>
           </div>
         </div>
       </div>
@@ -870,10 +877,10 @@ function staffTab(tab,btn){
   document.getElementById('staffMsgPanel').style.display=tab==='msg'?'':'none';
   if(tab==='mine') renderMyTickets();
   if(tab==='msg'){
-    // Auto-open IT Support conversation immediately
-    const itConvId = getDMId(currentUser.username, 'it_team');
-    openStaffConv(itConvId, 'IT Support');
     listenConversations();
+    // Auto open IT Support conversation
+    const itId=getDMId(currentUser.username,'it_team');
+    openChat(itId,'🔧 IT Support',false);
   }
 }
  
@@ -993,8 +1000,7 @@ function adminView(view,btn){
     document.getElementById('adminMessagesView').style.display='flex';
     currentMsgTab='team';
     listenConversations();
-    // Auto-open team chat
-    setTimeout(()=> openAdminConv('team_chat','IT Team Chat','team'), 300);
+    setTimeout(()=>openChat('team_chat','👥 IT Team Chat',true),200);
   }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
   else{
@@ -1365,198 +1371,249 @@ if(emailConfig.pubkey){try{emailjs.init(emailConfig.pubkey);}catch(e){}}
 
 // ══ MESSAGING ══
 let currentConvId = null;
-let msgListener = null;
-let currentMsgTab = 'dm'; // 'dm' or 'team'
+let currentMsgTab = 'dm';
+let _convListener = null;
+let _msgListener = null;
 
-// Get or create a DM conversation ID between two users
-function getDMId(userA, userB){
-  return [userA, userB].sort().join('__');
+function getDMId(a, b){
+  return [a,b].sort().join('__');
 }
 
-// Listen to conversations for current user
+// ══ CHAT: Listen to conversations ══
 function listenConversations(){
-  const q = query(collection(db,'messages'), orderBy('ts','asc'));
-  onSnapshot(collection(db,'conversations'), async (snap) => {
+  if(_convListener) return;
+  _convListener = onSnapshot(collection(db,'conversations'), snap => {
     const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(currentUser.role==='it'){
-      renderAdminConvList(convs);
-    } else {
-      renderStaffConvList(convs);
-    }
+    if(currentUser.role==='it') renderAdminConvList(convs);
+    else renderStaffConvList(convs);
   });
 }
 
+// ══ CHAT: Staff conversation list ══
 function renderStaffConvList(convs){
   const el = document.getElementById('staffConvList');
   if(!el) return;
-  // Staff only sees their DM with IT
-  const myConvs = convs.filter(c => c.type==='dm' && c.participants && c.participants.includes(currentUser.username));
+  const mine = convs.filter(c=>c.participants && c.participants.includes(currentUser.username));
   el.innerHTML = '';
-  // Always show IT Support option
-  const itConvId = getDMId(currentUser.username, 'it_team');
-  const itConv = myConvs.find(c=>c.id===itConvId) || null;
-  const unread = itConv && itConv.lastSender !== currentUser.username && itConv.unreadFor && itConv.unreadFor[currentUser.username];
-  const div = document.createElement('div');
-  div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .15s;background:${currentConvId===itConvId?'rgba(26,58,107,0.15)':'transparent'};`;
-  div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#1a2240;">🔧 IT Support</div><div style="font-size:11px;color:#5a6a8a;margin-top:2px;">${itConv?itConv.lastMsg||'Start chatting…':'Start chatting…'}</div>${unread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;">New</span>':''}`;
-  div.onmouseenter = ()=>{ if(currentConvId!==itConvId) div.style.background='rgba(26,58,107,0.08)'; };
-  div.onmouseleave = ()=>{ if(currentConvId!==itConvId) div.style.background='transparent'; };
-  div.onclick = ()=> openStaffConv(itConvId, 'IT Support');
-  el.appendChild(div);
+  // Always show IT Support as first option
+  const itId = getDMId(currentUser.username,'it_team');
+  const itConv = mine.find(c=>c.id===itId);
+  const itDiv = document.createElement('div');
+  const itActive = currentConvId===itId;
+  itDiv.style.cssText=`padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:4px;background:${itActive?'rgba(26,58,107,0.2)':'transparent'};transition:background .15s;`;
+  const itUnread = itConv && itConv.unreadFor && itConv.unreadFor[currentUser.username];
+  itDiv.innerHTML=`<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#1a2240;">🔧 IT Support${itUnread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;margin-left:6px;">New</span>':''}</div><div style="font-size:11px;color:#5a6a8a;margin-top:2px;">${itConv&&itConv.lastMsg?itConv.lastMsg:'Tap to start chatting'}</div>`;
+  itDiv.onmouseenter=()=>{if(!itActive)itDiv.style.background='rgba(26,58,107,0.08)';};
+  itDiv.onmouseleave=()=>{if(!itActive)itDiv.style.background='transparent';};
+  itDiv.onclick=()=>openChat(itId,'🔧 IT Support',false);
+  el.appendChild(itDiv);
 }
 
+// ══ CHAT: Admin conversation list ══
 function renderAdminConvList(convs){
   const el = document.getElementById('adminConvList');
   if(!el) return;
-  el.innerHTML = '';
-  if(currentMsgTab === 'team'){
-    // Show team chat
-    const div = document.createElement('div');
-    div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;background:${currentConvId==='team_chat'?'rgba(192,57,43,0.15)':'transparent'};transition:background .15s;`;
-    div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">👥 IT Team Chat</div><div style="font-size:11px;color:#5a7aaa;margin-top:2px;">Internal team discussion</div>`;
-    div.onclick = ()=> openAdminConv('team_chat','IT Team Chat', 'team');
-    el.appendChild(div);
+  el.innerHTML='';
+
+  if(currentMsgTab==='team'){
+    // Team chat entry
+    const d=document.createElement('div');
+    const active=currentConvId==='team_chat';
+    d.style.cssText=`padding:10px 12px;border-radius:8px;cursor:pointer;background:${active?'rgba(192,57,43,0.2)':'transparent'};transition:background .15s;margin-bottom:4px;`;
+    d.innerHTML=`<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">👥 IT Team Chat</div><div style="font-size:11px;color:#5a7aaa;margin-top:2px;">Internal team only</div>`;
+    d.onmouseenter=()=>{if(!active)d.style.background='rgba(255,255,255,0.05)';};
+    d.onmouseleave=()=>{if(!active)d.style.background='transparent';};
+    d.onclick=()=>openChat('team_chat','👥 IT Team Chat',true);
+    el.appendChild(d);
+    // Also show all users for DM from IT side
+    const users = getUsers().filter(u=>u.username!==currentUser.username);
+    if(users.length){
+      const lbl=document.createElement('div');
+      lbl.style.cssText='padding:8px 12px 4px;font-size:10px;color:#3a5a94;text-transform:uppercase;letter-spacing:.08em;font-weight:700;';
+      lbl.textContent='Message a user';
+      el.appendChild(lbl);
+      users.forEach(u=>{
+        const dmId=getDMId(currentUser.username,u.username);
+        const conv=convs.find(c=>c.id===dmId);
+        const div=document.createElement('div');
+        const isActive=currentConvId===dmId;
+        div.style.cssText=`padding:10px 12px;border-radius:8px;cursor:pointer;background:${isActive?'rgba(192,57,43,0.2)':'transparent'};transition:background .15s;margin-bottom:4px;`;
+        const initials=u.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        div.innerHTML=`<div style="display:flex;align-items:center;gap:8px;"><div style="width:28px;height:28px;border-radius:50%;background:#1a3a6b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">${initials}</div><div><div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">${u.name}</div><div style="font-size:10px;color:#5a7aaa;">${conv&&conv.lastMsg?conv.lastMsg.slice(0,28)+'…':'Start a conversation'}</div></div></div>`;
+        div.onmouseenter=()=>{if(!isActive)div.style.background='rgba(255,255,255,0.05)';};
+        div.onmouseleave=()=>{if(!isActive)div.style.background='transparent';};
+        div.onclick=()=>openChat(dmId,'💬 '+u.name,true);
+        el.appendChild(div);
+      });
+    }
   } else {
-    // Show DM conversations with staff
-    const dmConvs = convs.filter(c=>c.type==='dm');
-    if(!dmConvs.length){
-      el.innerHTML = '<div style="padding:16px;font-size:12px;color:#4a6a94;text-align:center;">No messages yet.<br>Staff will message you here.</div>';
+    // DM tab — show all conversations admin is part of
+    const dms = convs.filter(c=>c.type==='dm' && c.participants && c.participants.includes(currentUser.username));
+    if(!dms.length){
+      el.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:#3a5a94;">No messages yet.<br>Use Team Chat tab to find users.</div>';
       return;
     }
-    dmConvs.sort((a,b)=>(b.ts||0)-(a.ts||0)).forEach(conv => {
-      const other = conv.participants.find(p=>p!=='it_team');
-      const users = getUsers();
-      const u = users.find(x=>x.username===other);
-      const name = u ? u.name : other;
-      const unread = conv.unreadFor && conv.unreadFor['it_team'];
-      const div = document.createElement('div');
-      div.style.cssText = `padding:10px 12px;border-radius:8px;cursor:pointer;background:${currentConvId===conv.id?'rgba(192,57,43,0.15)':'transparent'};transition:background .15s;`;
-      div.innerHTML = `<div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">${name}${unread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;margin-left:6px;">New</span>':''}</div><div style="font-size:11px;color:#5a7aaa;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${conv.lastMsg||'…'}</div>`;
-      div.onclick = ()=> openAdminConv(conv.id, name, 'dm');
+    dms.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(conv=>{
+      const other=conv.participants.find(p=>p!==currentUser.username);
+      const u=getUsers().find(x=>x.username===other);
+      const name=u?u.name:other;
+      const unread=conv.unreadFor&&conv.unreadFor[currentUser.username];
+      const isActive=currentConvId===conv.id;
+      const div=document.createElement('div');
+      div.style.cssText=`padding:10px 12px;border-radius:8px;cursor:pointer;background:${isActive?'rgba(192,57,43,0.2)':'transparent'};transition:background .15s;margin-bottom:4px;`;
+      const initials=(name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      div.innerHTML=`<div style="display:flex;align-items:center;gap:8px;"><div style="width:28px;height:28px;border-radius:50%;background:#1a3a6b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">${initials}</div><div style="flex:1;min-width:0;"><div style="font-family:Outfit,sans-serif;font-weight:700;font-size:13px;color:#d0e0f0;">${name}${unread?'<span style="background:#c0392b;color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;margin-left:6px;">New</span>':''}</div><div style="font-size:10px;color:#5a7aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${conv.lastMsg||'…'}</div></div></div>`;
+      div.onmouseenter=()=>{if(!isActive)div.style.background='rgba(255,255,255,0.05)';};
+      div.onmouseleave=()=>{if(!isActive)div.style.background='transparent';};
+      div.onclick=()=>openChat(conv.id,'💬 '+name,true);
       el.appendChild(div);
     });
   }
 }
 
-async function openStaffConv(convId, title){
+// ══ CHAT: Open a conversation (works for both staff and admin) ══
+async function openChat(convId, title, isDark){
   currentConvId = convId;
-  document.getElementById('staffChatHeader').textContent = '🔧 ' + title;
-  document.getElementById('staffChatInputArea').style.display = 'flex';
-  document.getElementById('staffMsgInput').focus();
-  // Ensure conversation doc exists
-  await setDoc(doc(db,'conversations',convId), {
-    type:'dm', participants:[currentUser.username,'it_team'],
-    updatedAt: Date.now()
-  }, {merge:true});
+
+  // Set header
+  const hdrId = isDark ? 'adminChatHeader' : 'staffChatHeader';
+  const msgId = isDark ? 'adminChatMessages' : 'staffChatMessages';
+  const inputId = isDark ? 'adminChatInput' : 'staffChatInputArea';
+  const hdr = document.getElementById(hdrId);
+  if(hdr) hdr.innerHTML = `<span style="font-weight:800;">${title}</span>`;
+  const input = document.getElementById(inputId);
+  if(input) input.style.display='flex';
+
+  // Create conversation in Firestore if it doesn't exist
+  const isTeam = convId==='team_chat';
+  const participants = isTeam
+    ? getUsers().map(u=>u.username)
+    : [...new Set([currentUser.username, convId.split('__').find(p=>p!==currentUser.username)])];
+
+  await setDoc(doc(db,'conversations',convId),{
+    type: isTeam?'team':'dm',
+    participants,
+    updatedAt: Date.now(),
+    lastMsg: ''
+  },{merge:true});
+
   // Mark as read
-  await setDoc(doc(db,'conversations',convId), {[`unreadFor.${currentUser.username}`]:false}, {merge:true});
-  listenMessages('staffChatMessages', convId, false);
-  // Re-render list
-  const snap = await getDocs(collection(db,'conversations'));
-  renderStaffConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
-}
+  const readUpdate = {};
+  readUpdate[`unreadFor.${currentUser.username}`] = false;
+  await setDoc(doc(db,'conversations',convId), readUpdate, {merge:true});
 
-async function openAdminConv(convId, title, type){
-  currentConvId = convId;
-  document.getElementById('adminChatHeader').textContent = (type==='team'?'👥 ':'💬 ') + title;
-  document.getElementById('adminChatInput').style.display = 'flex';
-  document.getElementById('adminMsgInput').focus();
-  if(type==='team'){
-    await setDoc(doc(db,'conversations',convId), {type:'team', updatedAt:Date.now()}, {merge:true});
-  }
-  // Mark as read for IT
-  await setDoc(doc(db,'conversations',convId), {['unreadFor.it_team']:false}, {merge:true});
-  listenMessages('adminChatMessages', convId, true);
-  const snap = await getDocs(collection(db,'conversations'));
-  renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
-}
+  // Stop previous message listener
+  if(_msgListener){ _msgListener(); _msgListener=null; }
 
-function listenMessages(containerId, convId, isDark){
-  if(msgListener) msgListener();
-  const q = query(collection(db,'conversations',convId,'msgs'), orderBy('ts','asc'));
-  msgListener = onSnapshot(q, snap => {
-    const el = document.getElementById(containerId);
-    if(!el) return;
-    el.innerHTML = '';
-    snap.docs.forEach(d => {
-      const msg = d.data();
-      const isMe = msg.sender === currentUser.username;
-      const bubble = document.createElement('div');
-      bubble.style.cssText = `display:flex;flex-direction:column;align-items:${isMe?'flex-end':'flex-start'};gap:3px;`;
-      const name = document.createElement('div');
-      name.style.cssText = `font-size:10px;color:${isDark?'#5a7aaa':'#7a8aaa'};font-family:Outfit,sans-serif;`;
-      name.textContent = isMe ? 'You' : msg.senderName;
-      const text = document.createElement('div');
-      text.style.cssText = `max-width:70%;padding:10px 14px;border-radius:${isMe?'14px 14px 4px 14px':'14px 14px 14px 4px'};font-size:13px;line-height:1.4;word-break:break-word;background:${isMe?(isDark?'#1a3a6b':'#1a3a6b'):(isDark?'#162240':'rgba(0,0,0,0.07)')};color:${isMe?'#fff':(isDark?'#d0e0f0':'#1a2240')};`;
-      text.textContent = msg.text;
-      const time = document.createElement('div');
-      time.style.cssText = `font-size:10px;color:${isDark?'#3a5a94':'#aaa'};`;
-      time.textContent = new Date(msg.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-      bubble.appendChild(name);
-      bubble.appendChild(text);
-      bubble.appendChild(time);
-      el.appendChild(bubble);
-    });
-    el.scrollTop = el.scrollHeight;
+  // Listen to messages in this conversation
+  const msgsRef = collection(db,'conversations',convId,'msgs');
+  const msgsQ = query(msgsRef, orderBy('ts','asc'));
+  _msgListener = onSnapshot(msgsQ, snap=>{
+    const msgs = snap.docs.map(d=>d.data());
+    renderMessages(msgId, msgs, isDark);
   });
+
+  // Focus input
+  const inp = document.getElementById(isDark?'adminMsgInput':'staffMsgInput');
+  if(inp) setTimeout(()=>inp.focus(),100);
 }
 
-async function sendStaffMessage(){
-  const input = document.getElementById('staffMsgInput');
-  const text = input.value.trim();
-  if(!text || !currentConvId) return;
-  input.value = '';
-  const msgData = {text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
-  await addDoc(collection(db,'conversations',currentConvId,'msgs'), msgData);
-  await setDoc(doc(db,'conversations',currentConvId), {
-    lastMsg:text, lastSender:currentUser.username, ts:Date.now(),
-    'unreadFor.it_team': true
-  }, {merge:true});
-}
-
-async function sendAdminMessage(){
-  const input = document.getElementById('adminMsgInput');
-  const text = input.value.trim();
-  if(!text || !currentConvId) return;
-  input.value = '';
-  const msgData = {text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
-  await addDoc(collection(db,'conversations',currentConvId,'msgs'), msgData);
-  // If DM, mark unread for the staff user
-  if(currentConvId !== 'team_chat'){
-    const convSnap = await getDocs(collection(db,'conversations'));
-    const conv = convSnap.docs.find(d=>d.id===currentConvId);
-    if(conv){
-      const other = conv.data().participants?.find(p=>p!=='it_team');
-      if(other){
-        await setDoc(doc(db,'conversations',currentConvId), {
-          lastMsg:text, lastSender:currentUser.username, ts:Date.now(),
-          [`unreadFor.${other}`]: true
-        }, {merge:true});
-      }
-    }
-  } else {
-    await setDoc(doc(db,'conversations',currentConvId), {
-      lastMsg:text, lastSender:currentUser.username, ts:Date.now()
-    }, {merge:true});
+// ══ CHAT: Render messages ══
+function renderMessages(containerId, msgs, isDark){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  el.innerHTML='';
+  if(!msgs.length){
+    el.innerHTML=`<div style="text-align:center;padding:40px 20px;font-size:13px;color:${isDark?'#3a5a94':'#9aacba'};">No messages yet. Say hello! 👋</div>`;
+    return;
   }
+  msgs.forEach(m=>{
+    const isMe = m.sender===currentUser.username;
+    const wrap=document.createElement('div');
+    wrap.style.cssText=`display:flex;flex-direction:column;align-items:${isMe?'flex-end':'flex-start'};gap:2px;`;
+    if(!isMe){
+      const name=document.createElement('div');
+      name.style.cssText=`font-size:10px;font-weight:700;color:${isDark?'#5a7aaa':'#7a8aaa'};padding:0 4px;`;
+      name.textContent=m.senderName||m.sender;
+      wrap.appendChild(name);
+    }
+    const bubble=document.createElement('div');
+    bubble.style.cssText=`max-width:70%;padding:10px 14px;border-radius:${isMe?'16px 4px 16px 16px':'4px 16px 16px 16px'};font-size:13px;line-height:1.5;word-break:break-word;`
+      +(isMe
+        ? 'background:#1a3a6b;color:#fff;'
+        : isDark?'background:#162240;color:#c0d8f0;':'background:rgba(26,58,107,0.1);color:#1a2240;');
+    bubble.textContent=m.text;
+    wrap.appendChild(bubble);
+    const time=document.createElement('div');
+    time.style.cssText=`font-size:10px;color:${isDark?'#2a4060':'#aab8c8'};padding:0 4px;`;
+    time.textContent=new Date(m.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    wrap.appendChild(time);
+    el.appendChild(wrap);
+  });
+  if(wasAtBottom) el.scrollTop=el.scrollHeight;
 }
 
+// ══ CHAT: Send message (staff) ══
+async function sendStaffMessage(){
+  const inp=document.getElementById('staffMsgInput');
+  const text=inp?inp.value.trim():'';
+  if(!text||!currentConvId) return;
+  inp.value='';
+  const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
+  try {
+    await setDoc(doc(collection(db,'conversations',currentConvId,'msgs')), msg);
+    // Update conversation metadata
+    const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
+    // Mark unread for all other participants
+    const convSnap=await getDocs(collection(db,'conversations'));
+    const conv=convSnap.docs.find(d=>d.id===currentConvId);
+    if(conv){
+      const parts=conv.data().participants||[];
+      parts.filter(p=>p!==currentUser.username).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+    }
+    await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
+  } catch(e){ console.error('Send error:',e); }
+}
+
+// ══ CHAT: Send message (admin) ══
+async function sendAdminMessage(){
+  const inp=document.getElementById('adminMsgInput');
+  const text=inp?inp.value.trim():'';
+  if(!text||!currentConvId) return;
+  inp.value='';
+  const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
+  try {
+    await setDoc(doc(collection(db,'conversations',currentConvId,'msgs')), msg);
+    const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
+    const convSnap=await getDocs(collection(db,'conversations'));
+    const conv=convSnap.docs.find(d=>d.id===currentConvId);
+    if(conv){
+      const parts=conv.data().participants||[];
+      parts.filter(p=>p!==currentUser.username).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+    }
+    await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
+  } catch(e){ console.error('Send error:',e); }
+}
+
+// ══ CHAT: Switch admin tab ══
 function switchMsgTab(tab){
-  currentMsgTab = tab;
-  currentConvId = null;
-  document.getElementById('adminChatHeader').textContent = 'Select a conversation';
-  document.getElementById('adminChatInput').style.display = 'none';
-  document.getElementById('adminChatMessages').innerHTML = '';
-  if(msgListener){ msgListener(); msgListener=null; }
-  document.getElementById('msgTabDM').style.cssText = tab==='dm'?'flex:1;padding:6px;border-radius:7px;border:none;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:#1a3a6b;color:#fff;':'flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;';
-  document.getElementById('msgTabTeam').style.cssText = tab==='team'?'flex:1;padding:6px;border-radius:7px;border:none;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:#1a3a6b;color:#fff;':'flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;';
-  // Re-render conv list
+  currentMsgTab=tab;
+  document.getElementById('msgTabDM').style.cssText=`flex:1;padding:6px;border-radius:7px;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border:${tab==='dm'?'none':'1px solid #1e3060'};background:${tab==='dm'?'#1a3a6b':'none'};color:${tab==='dm'?'#fff':'#5a7aaa'};`;
+  document.getElementById('msgTabTeam').style.cssText=`flex:1;padding:6px;border-radius:7px;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border:${tab==='team'?'none':'1px solid #1e3060'};background:${tab==='team'?'#1a3a6b':'none'};color:${tab==='team'?'#fff':'#5a7aaa'};`;
+  // Reload conversation list
   getDocs(collection(db,'conversations')).then(snap=>{
     renderAdminConvList(snap.docs.map(d=>({id:d.id,...d.data()})));
   });
+  // Auto open team chat if team tab
+  if(tab==='team') openChat('team_chat','👥 IT Team Chat',true);
 }
 
-// ══ END MESSAGING ══
+// ══ CHAT: Staff start new conv (opens IT Support automatically) ══
+function staffStartNewConv(){
+  const itId=getDMId(currentUser.username,'it_team');
+  openChat(itId,'🔧 IT Support',false);
+}
 
 // ══ EXPOSE FUNCTIONS TO GLOBAL SCOPE (required for type="module") ══
 window.selectRole = selectRole;
@@ -1582,6 +1639,8 @@ window.sendAdminMessage = sendAdminMessage;
 window.switchMsgTab = switchMsgTab;
 window.openAdminConv = openAdminConv;
 window.openStaffConv = openStaffConv;
+window.openChat = openChat;
+window.staffStartNewConv = staffStartNewConv;
 window.sendTestEmail = sendTestEmail;
 
 </script>
