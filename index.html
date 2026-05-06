@@ -1508,9 +1508,11 @@ async function openChat(convId, title, isDark){
   // Listen to messages in this conversation
   const msgsRef = collection(db,'conversations',convId,'msgs');
   const msgsQ = query(msgsRef, orderBy('ts','asc'));
+  const _capturedMsgId = msgId;
+  const _capturedDark = isDark;
   _msgListener = onSnapshot(msgsQ, snap=>{
     const msgs = snap.docs.map(d=>d.data());
-    renderMessages(msgId, msgs, isDark);
+    renderMessages(_capturedMsgId, msgs, _capturedDark);
   });
 
   // Focus input
@@ -1551,7 +1553,8 @@ function renderMessages(containerId, msgs, isDark){
     wrap.appendChild(time);
     el.appendChild(wrap);
   });
-  if(wasAtBottom) el.scrollTop=el.scrollHeight;
+  // Always scroll to bottom for new messages
+  el.scrollTop=el.scrollHeight;
 }
 
 // ══ CHAT: Send message (staff) ══
@@ -1562,7 +1565,7 @@ async function sendStaffMessage(){
   inp.value='';
   const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
   try {
-    await setDoc(doc(collection(db,'conversations',currentConvId,'msgs')), msg);
+    await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
     // Update conversation metadata
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
     // Mark unread for all other participants
@@ -1584,7 +1587,7 @@ async function sendAdminMessage(){
   inp.value='';
   const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
   try {
-    await setDoc(doc(collection(db,'conversations',currentConvId,'msgs')), msg);
+    await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
     const convSnap=await getDocs(collection(db,'conversations'));
     const conv=convSnap.docs.find(d=>d.id===currentConvId);
