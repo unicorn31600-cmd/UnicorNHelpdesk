@@ -1433,7 +1433,7 @@ function renderAdminConvList(convs){
       lbl.textContent='Message a user';
       el.appendChild(lbl);
       users.forEach(u=>{
-        const dmId=getDMId(currentUser.username,u.username);
+        const dmId=getDMId('it_team',u.username);
         const conv=convs.find(c=>c.id===dmId);
         const div=document.createElement('div');
         const isActive=currentConvId===dmId;
@@ -1448,7 +1448,7 @@ function renderAdminConvList(convs){
     }
   } else {
     // DM tab — show all conversations admin is part of
-    const dms = convs.filter(c=>c.type==='dm' && c.participants && c.participants.includes(currentUser.username));
+    const dms = convs.filter(c=>c.type==='dm' && c.participants && c.participants.includes('it_team'));
     if(!dms.length){
       el.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:#3a5a94;">No messages yet.<br>Use Team Chat tab to find users.</div>';
       return;
@@ -1486,9 +1486,10 @@ async function openChat(convId, title, isDark){
 
   // Create conversation in Firestore if it doesn't exist
   const isTeam = convId==='team_chat';
+  const senderAlias = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
   const participants = isTeam
     ? getUsers().map(u=>u.username)
-    : [...new Set([currentUser.username, convId.split('__').find(p=>p!==currentUser.username)])];
+    : [...new Set([senderAlias, convId.split('__').find(p=>p!==senderAlias)])];
 
   await setDoc(doc(db,'conversations',convId),{
     type: isTeam?'team':'dm',
@@ -1498,8 +1499,9 @@ async function openChat(convId, title, isDark){
   },{merge:true});
 
   // Mark as read
+  const readKey = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
   const readUpdate = {};
-  readUpdate[`unreadFor.${currentUser.username}`] = false;
+  readUpdate[`unreadFor.${readKey}`] = false;
   await setDoc(doc(db,'conversations',convId), readUpdate, {merge:true});
 
   // Stop previous message listener
@@ -1585,7 +1587,10 @@ async function sendAdminMessage(){
   const text=inp?inp.value.trim():'';
   if(!text||!currentConvId) return;
   inp.value='';
-  const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
+  // For DMs, use 'it_team' as sender alias so staff can identify IT messages
+  const isTeamConv = currentConvId==='team_chat';
+  const senderAlias = isTeamConv ? currentUser.username : 'it_team';
+  const msg={text, sender:senderAlias, senderName:currentUser.name, ts:Date.now()};
   try {
     await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
@@ -1593,7 +1598,7 @@ async function sendAdminMessage(){
     const conv=convSnap.docs.find(d=>d.id===currentConvId);
     if(conv){
       const parts=conv.data().participants||[];
-      parts.filter(p=>p!==currentUser.username).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+      parts.filter(p=>p!==senderAlias).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
     }
     await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
   } catch(e){ console.error('Send error:',e); }
