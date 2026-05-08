@@ -1454,10 +1454,10 @@ function renderAdminConvList(convs){
       return;
     }
     dms.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(conv=>{
-      const other=conv.participants.find(p=>p!==currentUser.username);
+      const other=conv.participants.find(p=>p!=='it_team');
       const u=getUsers().find(x=>x.username===other);
       const name=u?u.name:other;
-      const unread=conv.unreadFor&&conv.unreadFor[currentUser.username];
+      const unread=conv.unreadFor&&conv.unreadFor['it_team'];
       const isActive=currentConvId===conv.id;
       const div=document.createElement('div');
       div.style.cssText=`padding:10px 12px;border-radius:8px;cursor:pointer;background:${isActive?'rgba(192,57,43,0.2)':'transparent'};transition:background .15s;margin-bottom:4px;`;
@@ -1499,9 +1499,9 @@ async function openChat(convId, title, isDark){
   },{merge:true});
 
   // Mark as read
-  const readKey = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
+  const readAlias = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
   const readUpdate = {};
-  readUpdate[`unreadFor.${readKey}`] = false;
+  readUpdate[`unreadFor.${readAlias}`] = false;
   await setDoc(doc(db,'conversations',convId), readUpdate, {merge:true});
 
   // Stop previous message listener
@@ -1533,7 +1533,8 @@ function renderMessages(containerId, msgs, isDark){
     return;
   }
   msgs.forEach(m=>{
-    const isMe = m.sender===currentUser.username;
+    const myAlias = currentUser.role==='it' ? 'it_team' : currentUser.username;
+    const isMe = m.sender===myAlias || m.sender===currentUser.username;
     const wrap=document.createElement('div');
     wrap.style.cssText=`display:flex;flex-direction:column;align-items:${isMe?'flex-end':'flex-start'};gap:2px;`;
     if(!isMe){
@@ -1587,10 +1588,9 @@ async function sendAdminMessage(){
   const text=inp?inp.value.trim():'';
   if(!text||!currentConvId) return;
   inp.value='';
-  // For DMs, use 'it_team' as sender alias so staff can identify IT messages
   const isTeamConv = currentConvId==='team_chat';
-  const senderAlias = isTeamConv ? currentUser.username : 'it_team';
-  const msg={text, sender:senderAlias, senderName:currentUser.name, ts:Date.now()};
+  const adminAlias = isTeamConv ? currentUser.username : 'it_team';
+  const msg={text, sender:adminAlias, senderName:currentUser.name, ts:Date.now()};
   try {
     await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
@@ -1598,7 +1598,7 @@ async function sendAdminMessage(){
     const conv=convSnap.docs.find(d=>d.id===currentConvId);
     if(conv){
       const parts=conv.data().participants||[];
-      parts.filter(p=>p!==senderAlias).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+      parts.filter(p=>p!==adminAlias).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
     }
     await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
   } catch(e){ console.error('Send error:',e); }
