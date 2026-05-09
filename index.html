@@ -1009,9 +1009,14 @@ function adminView(view,btn){
   else if(view==='settings'){sv.style.display='flex';}
   else if(view==='messages'){
     document.getElementById('adminMessagesView').style.display='flex';
-    currentMsgTab='team';
+    currentMsgTab='dm';
     listenConversations();
-    setTimeout(()=>openChat('team_chat','👥 IT Team Chat',true),200);
+    renderAdminConvList([]);
+    // Update tab button styles
+    const dmBtn=document.getElementById('msgTabDM');
+    const teamBtn=document.getElementById('msgTabTeam');
+    if(dmBtn) dmBtn.style.cssText=`flex:1;padding:6px;border-radius:7px;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border:none;background:#1a3a6b;color:#fff;`;
+    if(teamBtn) teamBtn.style.cssText=`flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;`;
   }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
   else{
@@ -1395,7 +1400,14 @@ function listenConversations(){
   if(_convListener) return;
   _convListener = onSnapshot(collection(db,'conversations'), snap => {
     const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(currentUser.role==='it') renderAdminConvList(convs);
+    if(currentUser.role==='it'){
+      // If admin is on DM tab and a new DM arrives, auto switch to DM tab
+      const hasDMs = convs.some(c=>c.type==='dm' && c.participants && c.participants.includes('it_team'));
+      if(hasDMs && currentMsgTab!=='dm'){
+        currentMsgTab='dm';
+      }
+      renderAdminConvList(convs);
+    }
     else renderStaffConvList(convs);
   });
 }
