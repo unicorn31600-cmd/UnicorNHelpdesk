@@ -637,6 +637,17 @@ const firebaseConfig = {
 const fireApp = initializeApp(firebaseConfig);
 const db = getFirestore(fireApp);
 
+// ══ TEST FIRESTORE CONNECTION ══
+(async()=>{
+  try {
+    await setDoc(doc(db,'_test','ping'),{ts:Date.now()},{merge:true});
+    console.log('✅ Firestore write: OK');
+  } catch(e) {
+    console.error('❌ Firestore write FAILED:',e.message);
+    alert('⚠️ Firestore Error: '+e.message+'\n\nGo to Firebase Console → Firestore → Rules and set:\nallow read, write: if true;');
+  }
+})();
+
 // ══ CONFIG ══
 let emailConfig = JSON.parse(localStorage.getItem('vuselela_email_cfg')||'{}');
 
