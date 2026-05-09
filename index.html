@@ -1010,13 +1010,17 @@ function adminView(view,btn){
   else if(view==='messages'){
     document.getElementById('adminMessagesView').style.display='flex';
     currentMsgTab='dm';
-    listenConversations();
-    renderAdminConvList([]);
     // Update tab button styles
     const dmBtn=document.getElementById('msgTabDM');
     const teamBtn=document.getElementById('msgTabTeam');
     if(dmBtn) dmBtn.style.cssText=`flex:1;padding:6px;border-radius:7px;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border:none;background:#1a3a6b;color:#fff;`;
     if(teamBtn) teamBtn.style.cssText=`flex:1;padding:6px;border-radius:7px;border:1px solid #1e3060;font-family:Outfit,sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:none;color:#5a7aaa;`;
+    // Stop old listener and restart fresh so it fires immediately
+    if(_convListener){ _convListener(); _convListener=null; }
+    _convListener = onSnapshot(collection(db,'conversations'), snap => {
+      const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderAdminConvList(convs);
+    });
   }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
   else{
@@ -1471,9 +1475,9 @@ function renderAdminConvList(convs){
     }
   } else {
     // DM tab — show all conversations admin is part of
-    const dms = convs.filter(c=>c.type==='dm' && c.participants && c.participants.includes('it_team'));
+    const dms = convs.filter(c=>c.participants && c.participants.includes('it_team'));
     if(!dms.length){
-      el.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:#3a5a94;">No messages yet.<br>Use Team Chat tab to find users.</div>';
+      el.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:#3a5a94;">No direct messages yet.<br>Staff will appear here when they message you.</div>';
       return;
     }
     dms.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(conv=>{
