@@ -1484,25 +1484,30 @@ async function openChat(convId, title, isDark){
   const input = document.getElementById(inputId);
   if(input) input.style.display='flex';
 
-  // Create conversation in Firestore if it doesn't exist
+  // Create conversation doc ONLY if it doesn't exist yet — never overwrite
   const isTeam = convId==='team_chat';
   const senderAlias = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
   const participants = isTeam
     ? getUsers().map(u=>u.username)
     : [...new Set([senderAlias, convId.split('__').find(p=>p!==senderAlias)])];
 
-  await setDoc(doc(db,'conversations',convId),{
-    type: isTeam?'team':'dm',
-    participants,
-    updatedAt: Date.now(),
-    lastMsg: ''
-  },{merge:true});
+  const convRef = doc(db,'conversations',convId);
+  const convSnap = await getDocs(collection(db,'conversations'));
+  const exists = convSnap.docs.some(d=>d.id===convId);
+  if(!exists){
+    await setDoc(convRef,{
+      type: isTeam?'team':'dm',
+      participants,
+      updatedAt: Date.now(),
+      lastMsg: ''
+    });
+  }
 
-  // Mark as read
+  // Mark as read only — never touch other fields
   const readAlias = (!isTeam && currentUser.role==='it') ? 'it_team' : currentUser.username;
   const readUpdate = {};
   readUpdate[`unreadFor.${readAlias}`] = false;
-  await setDoc(doc(db,'conversations',convId), readUpdate, {merge:true});
+  await setDoc(convRef, readUpdate, {merge:true});
 
   // Stop previous message listener
   if(_msgListener){ _msgListener(); _msgListener=null; }
