@@ -417,9 +417,11 @@ table.admin-table{width:100%;border-collapse:collapse;}
       </div>
     </div>
   </div>
+  <!-- FOOTER -->
+  <div style="text-align:center;padding:16px;font-family:Outfit,sans-serif;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:0.15em;">
+    © 2026 Unicorn. All rights reserved.
+  </div>
 </div>
- 
-<!-- ════ ADMIN PANEL ════ -->
 <div id="adminScreen" class="screen">
   <div class="admin-sidebar">
     <div class="admin-brand"><div class="admin-brand-name">Vuselela IT</div><div class="admin-brand-role">Admin Console</div></div>
@@ -579,6 +581,10 @@ table.admin-table{width:100%;border-collapse:collapse;}
         </div>
       </div>
     </div>
+  </div>
+  <!-- FOOTER -->
+  <div style="text-align:center;padding:12px;font-family:Outfit,sans-serif;font-size:11px;color:rgba(255,255,255,0.2);letter-spacing:0.15em;border-top:1px solid rgba(255,255,255,0.05);margin-top:auto;">
+    © 2026 Unicorn. All rights reserved.
   </div>
 </div>
  
@@ -1020,6 +1026,16 @@ function adminView(view,btn){
     _convListener = onSnapshot(collection(db,'conversations'), snap => {
       const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
       renderAdminConvList(convs);
+      // update badge
+      const unreadCount = convs.filter(c=>
+        c.participants && c.participants.includes('it_team') &&
+        c.unreadFor && c.unreadFor['it_team']
+      ).length;
+      const badge = document.getElementById('adminUnreadBadge');
+      if(badge){
+        badge.textContent = unreadCount;
+        badge.style.display = unreadCount > 0 ? 'inline-block' : 'none';
+      }
     });
   }
   else if(view==='users'){uv.style.display='flex';renderUsersTable();}
@@ -1405,14 +1421,31 @@ function listenConversations(){
   _convListener = onSnapshot(collection(db,'conversations'), snap => {
     const convs = snap.docs.map(d=>({id:d.id,...d.data()}));
     if(currentUser.role==='it'){
-      // If admin is on DM tab and a new DM arrives, auto switch to DM tab
-      const hasDMs = convs.some(c=>c.type==='dm' && c.participants && c.participants.includes('it_team'));
-      if(hasDMs && currentMsgTab!=='dm'){
-        currentMsgTab='dm';
-      }
+      const hasDMs = convs.some(c=>c.participants && c.participants.includes('it_team'));
+      if(hasDMs && currentMsgTab!=='dm') currentMsgTab='dm';
       renderAdminConvList(convs);
+      // ── Admin unread badge ──
+      const unreadCount = convs.filter(c=>
+        c.participants && c.participants.includes('it_team') &&
+        c.unreadFor && c.unreadFor['it_team']
+      ).length;
+      const badge = document.getElementById('adminUnreadBadge');
+      if(badge){
+        badge.textContent = unreadCount;
+        badge.style.display = unreadCount > 0 ? 'inline-block' : 'none';
+      }
+    } else {
+      renderStaffConvList(convs);
+      // ── Staff unread badge ──
+      const itId = getDMId(currentUser.username,'it_team');
+      const itConv = convs.find(c=>c.id===itId);
+      const hasUnread = itConv && itConv.unreadFor && itConv.unreadFor[currentUser.username];
+      const badge = document.getElementById('staffUnreadBadge');
+      if(badge){
+        badge.textContent = hasUnread ? '●' : '0';
+        badge.style.display = hasUnread ? 'inline-block' : 'none';
+      }
     }
-    else renderStaffConvList(convs);
   });
 }
 
