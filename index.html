@@ -842,6 +842,7 @@ async function doLogin(){
   }
   currentUser = {username:found.username, name:found.name, role:found.role, dept:found.dept||''};
   hideLoadingOverlay();
+  resetAutoLogout(); // start inactivity timer
   if(currentUser.role==='it') showAdminPanel();
   else showStaffPortal();
 }
@@ -851,6 +852,11 @@ async function doLogin(){
 async function doLogout(){
   currentUser=null;
   _ticketListenerActive=false;
+  // Clear auto logout timer
+  if(window._autoLogoutTimer) clearTimeout(window._autoLogoutTimer);
+  if(window._autoLogoutWarning) clearTimeout(window._autoLogoutWarning);
+  const warn = document.getElementById('autoLogoutWarn');
+  if(warn) warn.style.display='none';
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('loginScreen').classList.add('active');
   ['staffUser','staffPass','itUser','itPass'].forEach(id=>document.getElementById(id).value='');
@@ -859,6 +865,37 @@ async function doLogout(){
   document.getElementById('loginFormStep').style.display='none';
   document.getElementById('roleSelectStep').style.display='';
 }
+
+// ══ AUTO LOGOUT (20 mins inactivity) ══
+const AUTO_LOGOUT_MS = 20 * 60 * 1000; // 20 minutes
+const WARN_BEFORE_MS = 60 * 1000;       // warn 1 min before
+
+function resetAutoLogout(){
+  if(!currentUser) return;
+  if(window._autoLogoutTimer) clearTimeout(window._autoLogoutTimer);
+  if(window._autoLogoutWarning) clearTimeout(window._autoLogoutWarning);
+  const warn = document.getElementById('autoLogoutWarn');
+  if(warn) warn.style.display='none';
+
+  // Show warning 1 min before logout
+  window._autoLogoutWarning = setTimeout(()=>{
+    const w = document.getElementById('autoLogoutWarn');
+    if(w && currentUser) w.style.display='flex';
+  }, AUTO_LOGOUT_MS - WARN_BEFORE_MS);
+
+  // Auto logout after 20 mins
+  window._autoLogoutTimer = setTimeout(()=>{
+    if(currentUser){
+      doLogout();
+      alert('You have been logged out due to 20 minutes of inactivity.');
+    }
+  }, AUTO_LOGOUT_MS);
+}
+
+// Listen to any user activity
+['mousemove','keydown','click','touchstart','scroll'].forEach(evt=>{
+  document.addEventListener(evt, ()=>{ if(currentUser) resetAutoLogout(); }, { passive:true });
+});
  
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
  
@@ -1739,5 +1776,24 @@ window.staffStartNewConv = staffStartNewConv;
 window.sendTestEmail = sendTestEmail;
 
 </script>
+<!-- AUTO LOGOUT WARNING BANNER -->
+<div id="autoLogoutWarn" style="
+  display:none;
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#c0392b;color:#fff;
+  padding:14px 28px;border-radius:12px;
+  font-family:Outfit,sans-serif;font-size:14px;font-weight:700;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  z-index:99999;align-items:center;gap:16px;
+  white-space:nowrap;
+">
+  ⏱️ You'll be logged out in 1 minute due to inactivity.
+  <button onclick="resetAutoLogout()" style="
+    background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);
+    color:#fff;padding:6px 16px;border-radius:8px;cursor:pointer;
+    font-family:Outfit,sans-serif;font-weight:700;font-size:13px;
+  ">Stay logged in</button>
+</div>
+
 </body>
 </html>
