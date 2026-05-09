@@ -1573,18 +1573,28 @@ async function sendStaffMessage(){
   inp.value='';
   const msg={text, sender:currentUser.username, senderName:currentUser.name, ts:Date.now()};
   try {
+    // Ensure conversation doc exists first
+    await setDoc(doc(db,'conversations',currentConvId),{
+      type: currentConvId==='team_chat'?'team':'dm',
+      updatedAt: Date.now(),
+      lastMsg: text
+    },{merge:true});
+    // Add the message
     await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
-    // Update conversation metadata
+    // Mark unread for other participants
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
-    // Mark unread for all other participants
     const convSnap=await getDocs(collection(db,'conversations'));
     const conv=convSnap.docs.find(d=>d.id===currentConvId);
     if(conv){
       const parts=conv.data().participants||[];
       parts.filter(p=>p!==currentUser.username).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+      await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
     }
-    await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
-  } catch(e){ console.error('Send error:',e); }
+  } catch(e){
+    console.error('Send error:',e);
+    alert('Message failed to send: '+e.message);
+    if(inp) inp.value=text; // restore text so user doesn't lose it
+  }
 }
 
 // ══ CHAT: Send message (admin) ══
@@ -1597,16 +1607,28 @@ async function sendAdminMessage(){
   const adminAlias = isTeamConv ? currentUser.username : 'it_team';
   const msg={text, sender:adminAlias, senderName:currentUser.name, ts:Date.now()};
   try {
+    // Ensure conversation doc exists first
+    await setDoc(doc(db,'conversations',currentConvId),{
+      type: isTeamConv?'team':'dm',
+      updatedAt: Date.now(),
+      lastMsg: text
+    },{merge:true});
+    // Add the message
     await addDoc(collection(db,'conversations',currentConvId,'msgs'), msg);
+    // Mark unread for other participants
     const unreadUpdate={lastMsg:text, updatedAt:Date.now()};
     const convSnap=await getDocs(collection(db,'conversations'));
     const conv=convSnap.docs.find(d=>d.id===currentConvId);
     if(conv){
       const parts=conv.data().participants||[];
       parts.filter(p=>p!==adminAlias).forEach(p=>{ unreadUpdate[`unreadFor.${p}`]=true; });
+      await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
     }
-    await setDoc(doc(db,'conversations',currentConvId),unreadUpdate,{merge:true});
-  } catch(e){ console.error('Send error:',e); }
+  } catch(e){
+    console.error('Send error:',e);
+    alert('Message failed to send: '+e.message);
+    if(inp) inp.value=text; // restore text so user doesn't lose it
+  }
 }
 
 // ══ CHAT: Switch admin tab ══
